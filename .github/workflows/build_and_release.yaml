@@ -54,15 +54,18 @@ jobs:
         run: |
           brew install ninja p7zip
 
-      # Fix libarchive build
+      # Fix libarchive - skip problematic checks
       - name: Fix libarchive
         run: |
           cd third_party/libarchive
-          mkdir -p build/cmake build
+          mkdir -p build
           echo "3005003" > build/version
 
-          # Create minimal CheckHeaderDirent.cmake
-          cat > build/cmake/CheckHeaderDirent.cmake << 'EOF'
+          # Create stub CMake modules to bypass checks
+          mkdir -p build/cmake
+
+          # CheckHeaderDirent - simplified version
+          cat > build/cmake/CheckHeaderDirent.cmake << 'CHECKHEADEREOF'
           macro(CHECK_HEADER_DIRENT)
             include(CheckIncludeFiles)
             check_include_files(dirent.h HAVE_DIRENT_H)
@@ -70,34 +73,35 @@ jobs:
               set(HAVE_HEADER_DIRENT 1)
             endif()
           endmacro()
-          EOF
+          CHECKHEADEREOF
 
-          # Create other required CMake modules
-          cat > build/cmake/CheckFileOffsetBits.cmake << 'EOF'
-          include(CheckTypeSize)
-          check_type_size(off_t SIZEOF_OFF_T)
-          if(NOT "${SIZEOF_OFF_T}" STREQUAL "8")
-              set(_FILE_OFFSET_BITS 64)
-          endif()
-          EOF()
+          # CheckFileOffsetBits - always set to 64 for large file support
+          cat > build/cmake/CheckFileOffsetBits.cmake << 'CHECKFILEOFFSETEOF'
+          macro(CHECK_FILE_OFFSET_BITS)
+            set(_FILE_OFFSET_BITS 64 CACHE INTERNAL "_FILE_OFFSET_BITS macro needed for large files")
+            message(STATUS "Checking _FILE_OFFSET_BITS for large files - 64")
+          endmacro()
+          CHECKFILEOFFSETEOF
 
-          cat > build/cmake/CheckTypeExists.cmake << 'EOF'
+          # CheckTypeExists - use check_type_size
+          cat > build/cmake/CheckTypeExists.cmake << 'CHECKTYPEEOF'
           include(CheckTypeSize)
           macro(CHECK_TYPE_EXISTS TYPE VARIABLE)
             check_type_size("${TYPE}" ${VARIABLE})
           endmacro()
-          EOF()
+          CHECKTYPEEOF
 
-          cat > build/cmake/CheckFuncs.cmake << 'EOF'
+          # CheckFuncs - check for functions
+          cat > build/cmake/CheckFuncs.cmake << 'CHECKFUNCSEOF'
           include(CheckFunctionExists)
-          macro(CHECK_FUNCS FUNCTIONS)
-            foreach(func ${FUNCTIONS})
-              string(TOUPPER ${func} var)
-              string(REPLACE "." "_" var ${var})
+          macro(CHECK_FUNCS)
+            foreach(func ${ARGN})
+              string(TOUPPER "${func}" var)
+              string(REPLACE "." "_" var "${var}")
               check_function_exists("${func}" HAVE_${var})
             endforeach()
           endmacro()
-          EOF()
+          CHECKFUNCSEOF
         shell: bash
 
       # Download Skia for all platforms
