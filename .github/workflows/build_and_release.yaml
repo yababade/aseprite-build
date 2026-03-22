@@ -103,34 +103,16 @@ jobs:
           endmacro()
           CHECKFUNCSEOF
 
-          # CheckFunctionExistsGLIBC - check for glibc functions with proper macros
+          # CheckFunctionExistsGLIBC - wrapper for CheckFunctionExists
+          # This macro is used by libarchive to check for glibc-specific functions
           cat > build/cmake/CheckFunctionExistsGLIBC.cmake << 'CHECKGLIBCEOF'
           include(CheckFunctionExists)
+          # CHECK_FUNCTION_EXISTS_GLIBC - check if a function exists in glibc
+          # Usage: CHECK_FUNCTION_EXISTS_GLIBC("function_name" VARIABLE)
           macro(CHECK_FUNCTION_EXISTS_GLIBC FUNCTION VARIABLE)
-            # First try with _GNU_SOURCE defined
-            try_compile(${VARIABLE}
-              ${CMAKE_BINARY_DIR}
-              "${CMAKE_CURRENT_SOURCE_DIR}/build/cmake/CheckFunctionExistsGLIBC.c"
-              COMPILE_DEFINITIONS "-D_GNU_SOURCE=1"
-              LINK_LIBRARIES)
-            # If that fails, fall back to standard check
-            if(NOT ${VARIABLE})
-              check_function_exists("${FUNCTION}" ${VARIABLE})
-            endif()
+            check_function_exists("${FUNCTION}" ${VARIABLE})
           endmacro()
           CHECKGLIBCEOF
-
-          # Create test source for glibc checks
-          cat > build/cmake/CheckFunctionExistsGLIBC.c << 'CSRC'
-          #ifdef __cplusplus
-          extern "C" {
-          #endif
-          extern char ${FUNCTION} ();
-          #ifdef __cplusplus
-          }
-          #endif
-          int main() { return ${FUNCTION} (); }
-          CSRC
         shell: bash
 
       # Download Skia for all platforms
