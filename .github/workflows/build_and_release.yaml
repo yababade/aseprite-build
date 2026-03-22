@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install ninja p7zip
+          brew install ninja p7zip libarchive
 
       # Download Skia for all platforms
       - name: Download Skia (Windows)
@@ -129,6 +129,10 @@ jobs:
             -DSKIA_DIR=$HOME/deps/skia \
             -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-arm64 \
             -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-arm64/libskia.a \
+            -DUSE_SHARED_LIBARCHIVE=ON \
+            -DCMAKE_C_FLAGS="-I/usr/local/include" \
+            -DCMAKE_CXX_FLAGS="-I/usr/local/include" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L/usr/local/lib" \
             -G Ninja \
             ..
 
