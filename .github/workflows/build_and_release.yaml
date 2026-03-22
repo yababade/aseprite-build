@@ -108,6 +108,30 @@ jobs:
           CHECKFUNCSEOF
         shell: bash
 
+      # Fix FindJpegTurbo.cmake - handle missing library gracefully
+      - name: Fix FindJpegTurbo.cmake
+        run: |
+          # Patch FindJpegTurbo.cmake to handle missing libjpeg-turbo in Skia
+          cd cmake
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            # macOS
+            sed -i '' '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
+  if(NOT LIBJPEG_TURBO_LIBRARY)\
+    message(STATUS "libjpeg-turbo not found in Skia, using dummy target (JPEG disabled)")\
+    set(LIBJPEG_TURBO_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/dummy_${CMAKE_STATIC_LIBRARY_PREFIX}jpeg${CMAKE_STATIC_LIBRARY_SUFFIX}")\
+  endif()
+            ' FindJpegTurbo.cmake
+          else
+            # Linux/Windows
+            sed -i '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
+  if(NOT LIBJPEG_TURBO_LIBRARY)\
+    message(STATUS "libjpeg-turbo not found in Skia, using dummy target (JPEG disabled)")\
+    set(LIBJPEG_TURBO_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/dummy_${CMAKE_STATIC_LIBRARY_PREFIX}jpeg${CMAKE_STATIC_LIBRARY_SUFFIX}")\
+  endif()
+            ' FindJpegTurbo.cmake
+          fi
+        shell: bash
+
       # Download Skia for all platforms
       - name: Download Skia (Windows)
         if: matrix.os == 'windows-latest'
@@ -140,6 +164,7 @@ jobs:
           cmake -G Ninja `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo `
             -DLAF_BACKEND=skia `
+            -DENABLE_WEBP=OFF `
             -DSKIA_DIR=C:\deps\skia `
             -DSKIA_LIBRARY_DIR=C:\deps\skia\out\Release-x64 `
             -DSKIA_LIBRARY=C:\deps\skia\out\Release-x64\skia.lib `
@@ -158,6 +183,7 @@ jobs:
             -DCMAKE_CXX_FLAGS:STRING=-stdlib=libstdc++ \
             -DCMAKE_EXE_LINKER_FLAGS:STRING=-stdlib=libstdc++ \
             -DLAF_BACKEND=skia \
+            -DENABLE_WEBP=OFF \
             -DSKIA_DIR=$HOME/deps/skia \
             -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-x64 \
             -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-x64/libskia.a \
@@ -174,6 +200,7 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             -DLAF_BACKEND=skia \
+            -DENABLE_WEBP=OFF \
             -DSKIA_DIR=$HOME/deps/skia \
             -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-arm64 \
             -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-arm64/libskia.a \
