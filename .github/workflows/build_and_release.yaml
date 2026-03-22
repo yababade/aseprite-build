@@ -10,6 +10,9 @@ env:
   ASEPRITE_VERSION: "1.3.17"
 
 jobs:
+  # Job 1: Fetch Aseprite release information (skip since we have source)
+  # Job 2: Build directly since source is already in repository
+
   build-aseprite:
     name: Build Aseprite
     runs-on: ${{ matrix.os }}
@@ -29,12 +32,6 @@ jobs:
         if: matrix.os == 'windows-latest'
         uses: seanmiddleditch/gha-setup-ninja@master
 
-      - name: Setup Python (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
       - name: Setup MSVC (Windows)
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
@@ -46,13 +43,13 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev libwebp-dev libjpeg-turbo8-dev
+          sudo apt-get install -y g++ cmake ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
 
       # macOS dependencies
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install ninja p7zip
+          brew install ninja
 
       # Fix libarchive - replace custom macros with standard CMake
       - name: Fix libarchive
@@ -111,84 +108,6 @@ jobs:
           CHECKFUNCSEOF
         shell: bash
 
-      # Fix FindJpegTurbo for Windows - make it optional when using Skia
-      - name: Fix FindJpegTurbo (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
-          $file = "cmake\FindJpegTurbo.cmake"
-          $content = Get-Content $file -Raw
-
-          # Wrap the library creation in an if statement to handle missing library
-          $oldBlock = @'
-  add_library(libjpeg-turbo STATIC IMPORTED)
-  set_target_properties(libjpeg-turbo PROPERTIES
-    IMPORTED_LOCATION "${LIBJPEG_TURBO_LIBRARY}"
-    INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
-'@
-
-          $newBlock = @'
-  if(NOT LIBJPEG_TURBO_LIBRARY)
-    add_library(libjpeg-turbo STATIC IMPORTED)
-    set_target_properties(libjpeg-turbo PROPERTIES
-      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.lib"
-      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
-    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")
-  else()
-    add_library(libjpeg-turbo STATIC IMPORTED)
-    set_target_properties(libjpeg-turbo PROPERTIES
-      IMPORTED_LOCATION "${LIBJPEG_TURBO_LIBRARY}"
-      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
-  endif()
-'@
-
-          $content = $content.Replace($oldBlock, $newBlock)
-          $content | Set-Content $file
-        shell: pwsh
-
-      # Fix FindJpegTurbo for macOS - make it optional when using Skia
-      - name: Fix FindJpegTurbo (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
-          cd cmake
-          sed -i '' '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
-  if(NOT LIBJPEG_TURBO_LIBRARY)\
-    add_library(libjpeg-turbo STATIC IMPORTED)\
-    set_target_properties(libjpeg-turbo PROPERTIES\
-      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.a"\
-      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})\
-    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")\
-  else()
-          ' FindJpegTurbo.cmake
-
-          # Add endif after INTERFACE_INCLUDE_DIRECTORIES line
-          sed -i '' '/INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})/a\
-  endif()
-          ' FindJpegTurbo.cmake
-        shell: bash
-
-      # Fix FindJpegTurbo for Ubuntu - make it optional when using Skia
-      - name: Fix FindJpegTurbo (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
-          cd cmake
-          sed -i '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
-  if(NOT LIBJPEG_TURBO_LIBRARY)\
-    add_library(libjpeg-turbo STATIC IMPORTED)\
-    set_target_properties(libjpeg-turbo PROPERTIES\
-      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.a"\
-      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})\
-    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")\
-  else()
-          ' FindJpegTurbo.cmake
-
-          # Add endif after INTERFACE_INCLUDE_DIRECTORIES line
-          sed -i '/INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})/a\
-  endif()
-          ' FindJpegTurbo.cmake
-
       # Download Skia for all platforms
       - name: Download Skia (Windows)
         if: matrix.os == 'windows-latest'
@@ -221,7 +140,6 @@ jobs:
           cmake -G Ninja `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo `
             -DLAF_BACKEND=skia `
-            -DENABLE_WEBP=OFF `
             -DSKIA_DIR=C:\deps\skia `
             -DSKIA_LIBRARY_DIR=C:\deps\skia\out\Release-x64 `
             -DSKIA_LIBRARY=C:\deps\skia\out\Release-x64\skia.lib `
@@ -256,7 +174,6 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             -DLAF_BACKEND=skia \
-            -DENABLE_WEBP=OFF \
             -DSKIA_DIR=$HOME/deps/skia \
             -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-arm64 \
             -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-arm64/libskia.a \
@@ -295,24 +212,45 @@ jobs:
           cp build/bin/*.dylib package/ 2>/dev/null || true
           cp -r data package/
 
-      # Upload artifact
-      - name: Upload artifact (Windows)
+      # Create release archives
+      - name: Create archive (Windows)
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Aseprite-Windows-x64
-          path: package
+        run: |
+          cd package
+          7z a -tzip ../Aseprite-${{ env.ASEPRITE_VERSION }}-Windows-x64.zip *
+        shell: pwsh
 
-      - name: Upload artifact (Ubuntu)
+      - name: Create archive (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Aseprite-Ubuntu-x64
-          path: package
+        run: |
+          cd package
+          zip -r ../Aseprite-${{ env.ASEPRITE_VERSION }}-Ubuntu-x64.zip *
 
-      - name: Upload artifact (macOS)
+      - name: Create archive (macOS)
         if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v4
+        run: |
+          cd package
+          zip -r ../Aseprite-${{ env.ASEPRITE_VERSION }}-macOS-arm64.zip *
+
+      # Upload to release
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
         with:
-          name: Aseprite-macOS-arm64
-          path: package
+          files: |
+            Aseprite-${{ env.ASEPRITE_VERSION }}-Windows-x64.zip
+            Aseprite-${{ env.ASEPRITE_VERSION }}-Ubuntu-x64.zip
+            Aseprite-${{ env.ASEPRITE_VERSION }}-macOS-arm64.zip
+          tag_name: v${{ env.ASEPRITE_VERSION }}
+          name: Aseprite ${{ env.ASEPRITE_VERSION }}
+          body: |
+            Built Aseprite ${{ env.ASEPRITE_VERSION }} from source code.
+
+            ## Downloads
+            - Windows: Aseprite-${{ env.ASEPRITE_VERSION }}-Windows-x64.zip
+            - Ubuntu: Aseprite-${{ env.ASEPRITE_VERSION }}-Ubuntu-x64.zip
+            - macOS (Apple Silicon): Aseprite-${{ env.ASEPRITE_VERSION }}-macOS-arm64.zip
+
+            Built with GitHub Actions.
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
