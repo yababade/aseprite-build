@@ -24,17 +24,6 @@ jobs:
         with:
           submodules: recursive
 
-      # Fix libarchive build
-      - name: Fix libarchive version file
-        run: |
-          cd third_party/libarchive
-          mkdir -p build
-          echo "3005003" > build/version
-          echo "#ifndef LIBARCHIVE_VERSION_S"
-          echo "#define LIBARCHIVE_VERSION_S \"3.5.3\""
-          echo "#endif" > build/version.h
-        shell: bash
-
       # Windows dependencies
       - name: Setup Ninja (Windows)
         if: matrix.os == 'windows-latest'
@@ -64,6 +53,52 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install ninja p7zip
+
+      # Fix libarchive build
+      - name: Fix libarchive
+        run: |
+          cd third_party/libarchive
+          mkdir -p build/cmake build
+          echo "3005003" > build/version
+
+          # Create minimal CheckHeaderDirent.cmake
+          cat > build/cmake/CheckHeaderDirent.cmake << 'EOF'
+          macro(CHECK_HEADER_DIRENT)
+            include(CheckIncludeFiles)
+            check_include_files(dirent.h HAVE_DIRENT_H)
+            if(HAVE_DIRENT_H)
+              set(HAVE_HEADER_DIRENT 1)
+            endif()
+          endmacro()
+          EOF
+
+          # Create other required CMake modules
+          cat > build/cmake/CheckFileOffsetBits.cmake << 'EOF'
+          include(CheckTypeSize)
+          check_type_size(off_t SIZEOF_OFF_T)
+          if(NOT "${SIZEOF_OFF_T}" STREQUAL "8")
+              set(_FILE_OFFSET_BITS 64)
+          endif()
+          EOF()
+
+          cat > build/cmake/CheckTypeExists.cmake << 'EOF'
+          include(CheckTypeSize)
+          macro(CHECK_TYPE_EXISTS TYPE VARIABLE)
+            check_type_size("${TYPE}" ${VARIABLE})
+          endmacro()
+          EOF()
+
+          cat > build/cmake/CheckFuncs.cmake << 'EOF'
+          include(CheckFunctionExists)
+          macro(CHECK_FUNCS FUNCTIONS)
+            foreach(func ${FUNCTIONS})
+              string(TOUPPER ${func} var)
+              string(REPLACE "." "_" var ${var})
+              check_function_exists("${func}" HAVE_${var})
+            endforeach()
+          endmacro()
+          EOF()
+        shell: bash
 
       # Download Skia for all platforms
       - name: Download Skia (Windows)
