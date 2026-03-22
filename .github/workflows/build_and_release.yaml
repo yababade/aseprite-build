@@ -1,0 +1,181 @@
+name: Build and Release Aseprite
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  ASEPRITE_VERSION: "1.3.17"
+
+jobs:
+  build-aseprite:
+    name: Build Aseprite
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Windows dependencies
+      - name: Setup Ninja (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: seanmiddleditch/gha-setup-ninja@master
+
+      - name: Setup Python (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      # Ubuntu dependencies
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ cmake ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
+
+      # macOS dependencies
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install ninja p7zip
+
+      # Download Skia for all platforms
+      - name: Download Skia (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          $skiaUrl = "https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip"
+          $skiaDir = "C:\deps\skia"
+          New-Item -ItemType Directory -Force -Path $skiaDir
+          Invoke-WebRequest -Uri $skiaUrl -OutFile "skia.zip"
+          Expand-Archive -Path "skia.zip" -DestinationPath $skiaDir -Force
+        shell: pwsh
+
+      - name: Download Skia (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Linux-Release-x64.zip
+          unzip -q Skia-Linux-Release-x64.zip -d $HOME/deps
+
+      - name: Download Skia (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-x64.zip
+          unzip -q Skia-macOS-Release-x64.zip -d $HOME/deps
+
+      # Configure CMake
+      - name: Configure CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir build
+          cd build
+          cmake -G Ninja `
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo `
+            -DLAF_BACKEND=skia `
+            -DSKIA_DIR=C:\deps\skia `
+            -DSKIA_LIBRARY_DIR=C:\deps\skia\out\Release-x64 `
+            -DSKIA_LIBRARY=C:\deps\skia\out\Release-x64\skia.lib `
+            ..
+        shell: pwsh
+
+      - name: Configure CMake (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir build
+          cd build
+          export CC=clang
+          export CXX=clang++
+          cmake \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_CXX_FLAGS:STRING=-stdlib=libstdc++ \
+            -DCMAKE_EXE_LINKER_FLAGS:STRING=-stdlib=libstdc++ \
+            -DLAF_BACKEND=skia \
+            -DSKIA_DIR=$HOME/deps/skia \
+            -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-x64 \
+            -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-x64/libskia.a \
+            -G Ninja \
+            ..
+
+      - name: Configure CMake (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir build
+          cd build
+          cmake \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 \
+            -DLAF_BACKEND=skia \
+            -DSKIA_DIR=$HOME/deps/skia \
+            -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-x64 \
+            -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-x64/libskia.a \
+            -G Ninja \
+            ..
+
+      # Build Aseprite
+      - name: Build Aseprite
+        run: |
+          cd build
+          ninja aseprite
+
+      # Package
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir package
+          Copy-Item build\bin\aseprite.exe package\
+          Copy-Item build\bin\*.dll package\ -ErrorAction SilentlyContinue
+          Copy-Item data package\ -Recurse
+        shell: pwsh
+
+      - name: Package (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir package
+          cp build/bin/aseprite package/
+          cp build/bin/*.so package/ 2>/dev/null || true
+          cp -r data package/
+
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir package
+          cp build/bin/aseprite package/
+          cp build/bin/*.dylib package/ 2>/dev/null || true
+          cp -r data package/
+
+      # Upload artifact
+      - name: Upload artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aseprite-Windows-x64
+          path: package
+
+      - name: Upload artifact (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aseprite-Ubuntu-x64
+          path: package
+
+      - name: Upload artifact (macOS)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aseprite-macOS-x64
+          path: package
