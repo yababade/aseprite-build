@@ -90,11 +90,11 @@ jobs:
           endmacro()
           CHECKFILEOFFSETEOF
 
-          # CheckTypeExists - use check_type_size
+          # CheckTypeExists - check if a type exists in headers
           cat > build/cmake/CheckTypeExists.cmake << 'CHECKTYPEEOF'
-          include(CheckTypeSize)
-          macro(CHECK_TYPE_EXISTS TYPE VARIABLE)
-            check_type_size("${TYPE}" ${VARIABLE})
+          include(CheckSymbolExists)
+          macro(CHECK_TYPE_EXISTS TYPE HEADER VARIABLE)
+            check_symbol_exists("${TYPE}" "${HEADER}" ${VARIABLE})
           endmacro()
           CHECKTYPEEOF
 
