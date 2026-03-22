@@ -52,7 +52,7 @@ jobs:
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install ninja p7zip webp jpeg-turbo
+          brew install ninja p7zip
 
       # Fix libarchive - replace custom macros with standard CMake
       - name: Fix libarchive
@@ -146,6 +146,49 @@ jobs:
           $content | Set-Content $file
         shell: pwsh
 
+      # Fix FindJpegTurbo for macOS - make it optional when using Skia
+      - name: Fix FindJpegTurbo (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
+          cd cmake
+          sed -i '' '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
+  if(NOT LIBJPEG_TURBO_LIBRARY)\
+    add_library(libjpeg-turbo STATIC IMPORTED)\
+    set_target_properties(libjpeg-turbo PROPERTIES\
+      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.a"\
+      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})\
+    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")\
+  else()
+          ' FindJpegTurbo.cmake
+
+          # Add endif after INTERFACE_INCLUDE_DIRECTORIES line
+          sed -i '' '/INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})/a\
+  endif()
+          ' FindJpegTurbo.cmake
+        shell: bash
+
+      # Fix FindJpegTurbo for Ubuntu - make it optional when using Skia
+      - name: Fix FindJpegTurbo (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
+          cd cmake
+          sed -i '/add_library(libjpeg-turbo STATIC IMPORTED)/i\
+  if(NOT LIBJPEG_TURBO_LIBRARY)\
+    add_library(libjpeg-turbo STATIC IMPORTED)\
+    set_target_properties(libjpeg-turbo PROPERTIES\
+      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.a"\
+      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})\
+    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")\
+  else()
+          ' FindJpegTurbo.cmake
+
+          # Add endif after INTERFACE_INCLUDE_DIRECTORIES line
+          sed -i '/INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})/a\
+  endif()
+          ' FindJpegTurbo.cmake
+
       # Download Skia for all platforms
       - name: Download Skia (Windows)
         if: matrix.os == 'windows-latest'
@@ -213,6 +256,7 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             -DLAF_BACKEND=skia \
+            -DENABLE_WEBP=OFF \
             -DSKIA_DIR=$HOME/deps/skia \
             -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-arm64 \
             -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-arm64/libskia.a \
