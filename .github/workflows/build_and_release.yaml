@@ -54,12 +54,19 @@ jobs:
         run: |
           brew install ninja p7zip
 
-      # Fix libarchive - skip problematic checks
+      # Fix libarchive - replace custom macros with standard CMake
       - name: Fix libarchive
         run: |
           cd third_party/libarchive
           mkdir -p build
           echo "3005003" > build/version
+
+          # Replace CHECK_FUNCTION_EXISTS_GLIBC with CHECK_FUNCTION_EXISTS
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' 's/CHECK_FUNCTION_EXISTS_GLIBC/CHECK_FUNCTION_EXISTS/g' CMakeLists.txt
+          else
+            sed -i 's/CHECK_FUNCTION_EXISTS_GLIBC/CHECK_FUNCTION_EXISTS/g' CMakeLists.txt
+          fi
 
           # Create stub CMake modules to bypass checks
           mkdir -p build/cmake
@@ -102,17 +109,6 @@ jobs:
             endforeach()
           endmacro()
           CHECKFUNCSEOF
-
-          # CheckFunctionExistsGLIBC - wrapper for CheckFunctionExists
-          # This macro is used by libarchive to check for glibc-specific functions
-          cat > build/cmake/CheckFunctionExistsGLIBC.cmake << 'CHECKGLIBCEOF'
-          include(CheckFunctionExists)
-          # CHECK_FUNCTION_EXISTS_GLIBC - check if a function exists in glibc
-          # Usage: CHECK_FUNCTION_EXISTS_GLIBC("function_name" VARIABLE)
-          macro(CHECK_FUNCTION_EXISTS_GLIBC FUNCTION VARIABLE)
-            check_function_exists("${FUNCTION}" ${VARIABLE})
-          endmacro()
-          CHECKGLIBCEOF
         shell: bash
 
       # Download Skia for all platforms
