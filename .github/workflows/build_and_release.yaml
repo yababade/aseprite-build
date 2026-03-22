@@ -46,13 +46,13 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev
+          sudo apt-get install -y g++ ninja-build libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev libfontconfig1-dev libwebp-dev libjpeg-turbo8-dev
 
       # macOS dependencies
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install ninja p7zip
+          brew install ninja p7zip webp jpeg-turbo
 
       # Fix libarchive - replace custom macros with standard CMake
       - name: Fix libarchive
@@ -111,6 +111,41 @@ jobs:
           CHECKFUNCSEOF
         shell: bash
 
+      # Fix FindJpegTurbo for Windows - make it optional when using Skia
+      - name: Fix FindJpegTurbo (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          # Patch FindJpegTurbo.cmake to make libjpeg-turbo optional when using Skia
+          $file = "cmake\FindJpegTurbo.cmake"
+          $content = Get-Content $file -Raw
+
+          # Wrap the library creation in an if statement to handle missing library
+          $oldBlock = @'
+  add_library(libjpeg-turbo STATIC IMPORTED)
+  set_target_properties(libjpeg-turbo PROPERTIES
+    IMPORTED_LOCATION "${LIBJPEG_TURBO_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
+'@
+
+          $newBlock = @'
+  if(NOT LIBJPEG_TURBO_LIBRARY)
+    add_library(libjpeg-turbo STATIC IMPORTED)
+    set_target_properties(libjpeg-turbo PROPERTIES
+      IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/dummy.lib"
+      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
+    message(STATUS "libjpeg-turbo not found in Skia, JPEG support disabled")
+  else()
+    add_library(libjpeg-turbo STATIC IMPORTED)
+    set_target_properties(libjpeg-turbo PROPERTIES
+      IMPORTED_LOCATION "${LIBJPEG_TURBO_LIBRARY}"
+      INTERFACE_INCLUDE_DIRECTORIES ${LIBJPEG_TURBO_INCLUDE_DIRS})
+  endif()
+'@
+
+          $content = $content.Replace($oldBlock, $newBlock)
+          $content | Set-Content $file
+        shell: pwsh
+
       # Download Skia for all platforms
       - name: Download Skia (Windows)
         if: matrix.os == 'windows-latest'
@@ -143,6 +178,7 @@ jobs:
           cmake -G Ninja `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo `
             -DLAF_BACKEND=skia `
+            -DENABLE_WEBP=OFF `
             -DSKIA_DIR=C:\deps\skia `
             -DSKIA_LIBRARY_DIR=C:\deps\skia\out\Release-x64 `
             -DSKIA_LIBRARY=C:\deps\skia\out\Release-x64\skia.lib `
