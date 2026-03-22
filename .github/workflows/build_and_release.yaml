@@ -74,8 +74,8 @@ jobs:
       - name: Download Skia (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-x64.zip
-          unzip -q Skia-macOS-Release-x64.zip -d $HOME/deps
+          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-arm64.zip
+          unzip -q Skia-macOS-Release-arm64.zip -d $HOME/deps
 
       # Configure CMake
       - name: Configure CMake (Windows)
@@ -117,12 +117,12 @@ jobs:
           cd build
           cmake \
             -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_OSX_ARCHITECTURES=x86_64 \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
             -DLAF_BACKEND=skia \
             -DSKIA_DIR=$HOME/deps/skia \
-            -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-x64 \
-            -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-x64/libskia.a \
+            -DSKIA_LIBRARY_DIR=$HOME/deps/skia/out/Release-arm64 \
+            -DSKIA_LIBRARY=$HOME/deps/skia/out/Release-arm64/libskia.a \
             -G Ninja \
             ..
 
@@ -177,5 +177,5 @@ jobs:
         if: matrix.os == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: Aseprite-macOS-x64
+          name: Aseprite-macOS-arm64
           path: package
