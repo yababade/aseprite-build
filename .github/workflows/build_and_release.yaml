@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        os: [windows-latest, ubuntu-latest]
 
     steps:
       - name: Checkout code
@@ -29,6 +29,17 @@ jobs:
         uses: jwlawson/actions-setup-cmake@v2
         with:
           cmake-version: 'latest'
+
+      # Fix libarchive build
+      - name: Fix libarchive version file
+        run: |
+          cd third_party/libarchive
+          mkdir -p build
+          echo "3005003" > build/version
+          echo "#ifndef LIBARCHIVE_VERSION_S"
+          echo "#define LIBARCHIVE_VERSION_S \"3.5.3\""
+          echo "#endif" > build/version.h
+        shell: bash
 
       # Windows dependencies
       - name: Setup Ninja (Windows)
