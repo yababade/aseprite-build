@@ -24,12 +24,6 @@ jobs:
         with:
           submodules: recursive
 
-      # Install CMake
-      - name: Setup CMake
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: 'latest'
-
       # Fix libarchive build
       - name: Fix libarchive version file
         run: |
